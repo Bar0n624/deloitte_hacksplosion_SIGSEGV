@@ -1,16 +1,5 @@
 package com.sigsegv;
 
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.json.JSONObject;
-
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.InputStreamReader;
@@ -22,12 +11,26 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.Properties;
 
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.json.JSONObject;
+
 public class MailService {
     static String topic = "mail";
     static String validateTopic = "validate";
-    static String parseUrl = "http://192.168.1.29:11434/api/generate";
-    static String prompt;
+    static String parseUrl1 = "http://192.168.1.29:11434/api/generate";
+    static String parseUrl2 = "http://192.168.1.136/api/generate";
+    static String prompt1;
+    static String prompt2;
 
+    private static KafkaConsumer<String, String> consumer;
     public static void main(String[] args) {
 
         try (BufferedReader br = new BufferedReader(new FileReader("finalprompt.txt"))) {
@@ -36,7 +39,7 @@ public class MailService {
             while ((line = br.readLine()) != null) {
                 sb.append(line).append("\n");
             }
-            prompt = sb.toString();
+            prompt1 = sb.toString();
         } catch (Exception e) {
             e.printStackTrace();
             return;
@@ -62,19 +65,20 @@ public class MailService {
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
             for (ConsumerRecord<String, String> record : records) {
                 String message = record.value();
-                String promptMessage = generatePrompt(message);
-                String finalResponse = sendPostRequest(parseUrl, promptMessage);
+                String promptMessage = generatePrompt(prompt1, message);
+                String finalResponse = sendPostRequest(parseUrl1, promptMessage);
                 producer.send(new ProducerRecord<>(validateTopic, finalResponse));
             }
         }
     }
 
-    private static String generatePrompt(String message) {
-        return prompt + message;
+    private static String generatePrompt(String prompt, String message) {
+        return prompt1 + message;
     }
 
     private static String sendPostRequest(String parseUrl, String prompt) {
         StringBuilder concatenatedResponse = new StringBuilder();
+        StringBuilder patternMatchResponse = new StringBuilder();
         try {
             URL url = new URL(parseUrl);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -103,12 +107,41 @@ public class MailService {
                     concatenatedResponse.append(response);
                 }
 
+                patternMatchResponse =  patternMatch(concatenatedResponse.toString());
+
                 System.out.println("Final Response: " + concatenatedResponse.toString());
 
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return concatenatedResponse.toString();
+        return patternMatchResponse.toString();
+    }
+
+    private static StringBuilder patternMatch(String input){
+     
+        StringBuilder completelyFinalResponse = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(new FileReader("patternMatchPrompt.txt"))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            prompt2 = sb.toString();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        // Rework on this loop
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+            for (ConsumerRecord<String, String> record : records) {
+                String promptMessage = generatePrompt(prompt2, input);
+                completelyFinalResponse.append(sendPostRequest(parseUrl2, promptMessage)).append("\n");
+            }
+            
+            return completelyFinalResponse;
+        }
     }
 }
