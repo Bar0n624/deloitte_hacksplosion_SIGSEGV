@@ -73,7 +73,7 @@ public class MailService {
     }
 
     private static String generatePrompt(String prompt, String message) {
-        return prompt1 + message;
+        return prompt + message;
     }
 
     private static String sendPostRequest(String parseUrl, String prompt) {
